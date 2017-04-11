@@ -383,7 +383,7 @@ class DockerHost(object):
         Exit the context of this host.
         :return: None
         """
-        self.cleanup()
+#        self.cleanup()
 
     def cleanup(self):
         """

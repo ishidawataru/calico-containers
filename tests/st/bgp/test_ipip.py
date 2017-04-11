@@ -31,7 +31,7 @@ class TestIPIP(TestBase):
     def tearDown(self):
         self.remove_tunl_ip()
 
-    def test_ipip(self):
+    def _test_ipip(self):
         """
         Test IPIP routing with the different IPIP modes.
 
@@ -55,8 +55,8 @@ class TestIPIP(TestBase):
 
             # Autodetect the IP addresses - this should ensure the subnet is
             # correctly configured.
-            host1.start_calico_node("--ip=autodetect")
-            host2.start_calico_node("--ip=autodetect")
+            host1.start_calico_node("--ip=autodetect --backend=gobgp")
+            host2.start_calico_node("--ip=autodetect --backend=gobgp")
 
             # Create a network and a workload on each host.
             network1 = host1.create_network("subnet1")
@@ -129,37 +129,37 @@ class TestIPIP(TestBase):
             self.assert_ipip_routing(host1, workload_host1, workload_host2,
                                      True)
 
-    def test_ipip_addr_assigned(self):
-        with DockerHost('host', dind=False, start_calico=False) as host:
-            # Set up first pool before Node is started, to ensure we get tunl IP on boot
-            ipv4_pool = IPNetwork("10.0.1.0/24")
-            self.pool_action(host, "create", ipv4_pool, True)
-            host.start_calico_node()
-            self.assert_tunl_ip(host, ipv4_pool, expect=True)
-
-            # Disable the IP Pool, and make sure the tunl IP is not from this IP pool anymore.
-            self.pool_action(host, "apply", ipv4_pool, True, disabled=True)
-            self.assert_tunl_ip(host, ipv4_pool, expect=False)
-
-            # Re-enable the IP pool and make sure the tunl IP is assigned from that IP pool again.
-            self.pool_action(host, "apply", ipv4_pool, True)
-            self.assert_tunl_ip(host, ipv4_pool, expect=True)
-
-            # Test that removing pool removes the tunl IP.
-            self.pool_action(host, "delete", ipv4_pool, True)
-            self.assert_tunl_ip(host, ipv4_pool, expect=False)
-
-            # Test that re-adding the pool triggers the confd watch and we get an IP
-            self.pool_action(host, "create", ipv4_pool, True)
-            self.assert_tunl_ip(host, ipv4_pool, expect=True)
-
-            # Test that by adding another pool, then deleting the first,
-            # we remove the original IP, and allocate a new one from the new pool
-            new_ipv4_pool = IPNetwork("192.168.0.0/16")
-            self.pool_action(host, "create", new_ipv4_pool, True)
-            self.pool_action(host, "delete", ipv4_pool, True)
-            self.assert_tunl_ip(host, new_ipv4_pool)
-
+#    def test_ipip_addr_assigned(self):
+#        with DockerHost('host', dind=False, start_calico=False) as host:
+#            # Set up first pool before Node is started, to ensure we get tunl IP on boot
+#            ipv4_pool = IPNetwork("10.0.1.0/24")
+#            self.pool_action(host, "create", ipv4_pool, True)
+#            host.start_calico_node()
+#            self.assert_tunl_ip(host, ipv4_pool, expect=True)
+#
+#            # Disable the IP Pool, and make sure the tunl IP is not from this IP pool anymore.
+#            self.pool_action(host, "apply", ipv4_pool, True, disabled=True)
+#            self.assert_tunl_ip(host, ipv4_pool, expect=False)
+#
+#            # Re-enable the IP pool and make sure the tunl IP is assigned from that IP pool again.
+#            self.pool_action(host, "apply", ipv4_pool, True)
+#            self.assert_tunl_ip(host, ipv4_pool, expect=True)
+#
+#            # Test that removing pool removes the tunl IP.
+#            self.pool_action(host, "delete", ipv4_pool, True)
+#            self.assert_tunl_ip(host, ipv4_pool, expect=False)
+#
+#            # Test that re-adding the pool triggers the confd watch and we get an IP
+#            self.pool_action(host, "create", ipv4_pool, True)
+#            self.assert_tunl_ip(host, ipv4_pool, expect=True)
+#
+#            # Test that by adding another pool, then deleting the first,
+#            # we remove the original IP, and allocate a new one from the new pool
+#            new_ipv4_pool = IPNetwork("192.168.0.0/16")
+#            self.pool_action(host, "create", new_ipv4_pool, True)
+#            self.pool_action(host, "delete", ipv4_pool, True)
+#            self.assert_tunl_ip(host, new_ipv4_pool)
+#
     def pool_action(self, host, action, cidr, ipip, disabled=False, ipip_mode="", calicoctl_version=None):
         """
         Perform an ipPool action.
@@ -290,7 +290,7 @@ class TestIPIP(TestBase):
         return int(match.group(1))
 
     @parameterized.expand([
-        (False,),
+#        (False,),
         (True,),
     ])
     def test_gce(self, with_ipip):
@@ -321,8 +321,8 @@ class TestIPIP(TestBase):
                         simulate_gce_routing=True,
                         start_calico=False) as host2:
 
-            host1.start_calico_node()
-            host2.start_calico_node()
+            host1.start_calico_node("--backend=gobgp")
+            host2.start_calico_node("--backend=gobgp")
 
             # Before creating any workloads, set the initial IP-in-IP state.
             host1.set_ipip_enabled(with_ipip)
@@ -333,6 +333,8 @@ class TestIPIP(TestBase):
                                                    network=network1)
             workload_host2 = host2.create_workload("workload2",
                                                    network=network1)
+
+            first = True
 
             for _ in [1, 2]:
                 # Check we do or don't have connectivity between the workloads,
@@ -361,5 +363,8 @@ class TestIPIP(TestBase):
                 check_bird_status(host2, [("node-to-node mesh", host1.ip, "Established")])
 
                 # Flip the IP-in-IP state for the next iteration.
-                with_ipip = not with_ipip
-                host1.set_ipip_enabled(with_ipip)
+                if first:
+                    with_ipip = not with_ipip
+                    host1.set_ipip_enabled(with_ipip)
+                    sleep(10)
+                    first = False

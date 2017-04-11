@@ -166,7 +166,7 @@ dist/allocate-ipip-addr: $(ALLOCATE_IPIP_FILES) vendor
 SOURCE_DIR?=$(dir $(lastword $(MAKEFILE_LIST)))
 SOURCE_DIR:=$(abspath $(SOURCE_DIR))
 LOCAL_IP_ENV?=$(shell ip route get 8.8.8.8 | head -1 | awk '{print $$7}')
-ST_TO_RUN?=tests/st/
+ST_TO_RUN?=tests/st/bgp/test_ipip.py
 
 # Can exclude the slower tests with "-a '!slow'"
 ST_OPTIONS?=
@@ -261,7 +261,7 @@ st: dist/calicoctl dist/calicoctl-v1.0.2 busybox.tar routereflector.tar calico-n
 	           -v $(SOURCE_DIR):/code \
 	           $(SYSTEMTEST_CONTAINER) \
 	           sh -c 'nosetests $(ST_TO_RUN) -sv --nologcapture  --with-xunit --xunit-file="/code/nosetests.xml" --with-timer $(ST_OPTIONS)'
-	$(MAKE) stop-etcd
+#	$(MAKE) stop-etcd
 
 ## Run the STs in a container using etcd with SSL certificate/key/CA verification.
 .PHONY: st-ssl
